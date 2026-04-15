@@ -1,39 +1,16 @@
 # ================= AUTO INSTALL (FIRST RUN ONLY) =================
 import subprocess
 import sys
-
-def install(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
-
-try:
-    import streamlit as st
-except:
-    install("streamlit")
-    import streamlit as st
-
-try:
-    import pandas as pd
-except:
-    install("pandas")
-    import pandas as pd
-
-try:
-    import numpy as np
-except:
-    install("numpy")
-    import numpy as np
-
-try:
-    import joblib
-except:
-    install("joblib")
-    import joblib
-
-try:
-    import matplotlib.pyplot as plt
-except:
-    install("matplotlib")
-    import matplotlib.pyplot as plt
+import streamlit as st
+import streamlit as st
+import pandas as pd
+import pandas as pd
+import numpy as np
+import numpy as np
+import joblib
+import joblib
+import matplotlib.pyplot as plt
+import matplotlib.pyplot as plt
 
 
 # ================= LOAD MODEL =================
