@@ -1,20 +1,16 @@
-# ================= AUTO INSTALL (FIRST RUN ONLY) =================
+# ================= IMPORTS =================
 import subprocess
 import sys
 import streamlit as st
-import streamlit as st
-import pandas as pd
 import pandas as pd
 import numpy as np
-import numpy as np
-import joblib
 import joblib
 import matplotlib.pyplot as plt
-import matplotlib.pyplot as plt
-
+from utils.optimizer import optimize_network
 
 # ================= LOAD MODEL =================
 model = joblib.load("rf_model.pkl")
+feature_columns = list(model.feature_names_in_)
 
 # ================= PAGE CONFIG =================
 st.set_page_config(page_title="5G QoS AI System", layout="wide")
@@ -33,12 +29,11 @@ rbs = st.sidebar.slider("Resource Blocks", 0, 100, 50)
 
 st.sidebar.markdown("---")
 st.sidebar.markdown("### Project Team")
-
 st.sidebar.markdown("""
-- Udbhav Mathur - 21111502823
-- Rohit Yadav - 21711502823
-- Siddhant Arya - 21811502823
-- Nandini Tiwari - 22111502823
+- Udbhav Mathur  
+- Rohit Yadav  
+- Siddhant Arya  
+- Nandini Tiwari  
 """)
 
 # ================= SLICE LOGIC =================
@@ -64,16 +59,16 @@ input_data = pd.DataFrame([{
 }])
 
 # Fill missing columns
-for col in model.feature_names_in_:
+for col in feature_columns:
     if col not in input_data.columns:
         input_data[col] = 0
 
-input_data = input_data[model.feature_names_in_]
+input_data = input_data[feature_columns]
 
 # ================= PREDICTION =================
 qos = model.predict(input_data)[0]
 
-# Keep track of observed QoS
+# ================= NORMALIZATION =================
 if "qos_min" not in st.session_state:
     st.session_state.qos_min = qos
     st.session_state.qos_max = qos
@@ -81,15 +76,10 @@ if "qos_min" not in st.session_state:
 st.session_state.qos_min = min(st.session_state.qos_min, qos)
 st.session_state.qos_max = max(st.session_state.qos_max, qos)
 
-# Normalize
 range_qos = st.session_state.qos_max - st.session_state.qos_min
 
-if range_qos == 0:
-    normalized = 0.5
-else:
-    normalized = (qos - st.session_state.qos_min) / range_qos
+normalized = 0.5 if range_qos == 0 else (qos - st.session_state.qos_min) / range_qos
 
-# Categorize
 if normalized > 0.7:
     category = "HIGH"
 elif normalized > 0.4:
@@ -98,16 +88,40 @@ else:
     category = "LOW"
 
 # ================= MODEL ACCURACY =================
-# (Use your known value)
-accuracy = 0.946  # your Random Forest R2
+accuracy = 0.946
 
 # ================= DASHBOARD =================
-col1, col2, col3 , col4 = st.columns(4)
+col1, col2, col3, col4 = st.columns(4)
 
 col1.metric("📡 Slice Type", slice_type)
 col2.metric("📊 Predicted QoS", f"{qos:,.0f}")
 col3.metric("⚡ QoS Category", category)
 col4.metric("🎯 Model Accuracy (R²)", accuracy)
+
+# ================= AI OPTIMIZATION ENGINE =================
+st.subheader("🚀 AI Network Optimization (Cost-Aware)")
+
+optimized = optimize_network(
+    model=model,
+    base_input=input_data.iloc[0].to_dict(),
+    feature_order=feature_columns
+)
+
+# Cost calculation
+current_cost = 2*rbs + 1.5*mcs
+optimized_cost = 2*optimized['rbs'] + 1.5*optimized['mcs']
+
+colA, colB, colC = st.columns(3)
+
+colA.metric("Optimized QoS", f"{optimized['qos']:,.0f}")
+colB.metric("QoS Gain", f"{((optimized['qos']-qos)/qos)*100:.2f}%")
+colC.metric("Cost Change", f"{optimized_cost-current_cost:.2f}")
+
+st.markdown("### 🔧 Optimal Configuration")
+st.write(f"• Resource Blocks: {rbs} → {optimized['rbs']}")
+st.write(f"• MCS: {mcs} → {optimized['mcs']}")
+st.write(f"• SNR: {snr} → {optimized['snr']}")
+st.write(f"• Recommended Slice: **{optimized['slice']}**")
 
 # ================= ADVISOR =================
 st.subheader("💡 AI Recommendations")
@@ -142,9 +156,7 @@ qos_values = []
 for v in values:
     temp = input_data.copy()
     temp[feature_col] = v
-    
-    pred = model.predict(temp)[0]
-    qos_values.append(pred)
+    qos_values.append(model.predict(temp)[0])
 
 fig, ax = plt.subplots()
 ax.plot(values, qos_values)
@@ -154,19 +166,15 @@ ax.set_title(f"Effect of {feature} on QoS")
 
 st.pyplot(fig)
 
-# ================= WHAT-IF SIMULATOR (ADVANCED UI) =================
+# ================= WHAT-IF SIMULATOR =================
 st.subheader("🔍 What-If QoS Improvement Simulator")
 
-st.markdown("Adjust improvements and see how QoS changes in real-time")
-
-# --- Improvement sliders ---
 colA, colB, colC = st.columns(3)
 
 snr_boost = colA.slider("Increase SNR", 0, 20, 5)
 rbs_boost = colB.slider("Increase RBs", 0, 50, 10)
 mcs_boost = colC.slider("Increase MCS", 0, 10, 2)
 
-# --- Create improved input ---
 improved_input = input_data.copy()
 improved_input['pcell_snr_max'] += snr_boost
 improved_input['scell_snr_max'] += snr_boost
@@ -175,43 +183,22 @@ improved_input['scell_downlink_num_rbs'] += rbs_boost
 improved_input['pcell_downlink_average_mcs'] += mcs_boost
 improved_input['scell_downlink_average_mcs'] += mcs_boost
 
-# --- Predictions ---
-current_qos = qos
 improved_qos = model.predict(improved_input)[0]
-
-# --- Improvement calculation ---
-improvement = ((improved_qos - current_qos) / current_qos) * 100
-
-# --- Display comparison ---
-st.markdown("### 📊 Before vs After Comparison")
+improvement = ((improved_qos - qos) / qos) * 100
 
 col1, col2, col3 = st.columns(3)
 
-col1.metric("Current QoS", f"{current_qos:,.0f}")
+col1.metric("Current QoS", f"{qos:,.0f}")
 col2.metric("Improved QoS", f"{improved_qos:,.0f}")
-col3.metric("Improvement %", f"{improvement:.2f}%", delta=f"{improvement:.2f}%")
-
-# --- Visual Indicator ---
-st.markdown("### 📈 QoS Improvement Visualization")
-
-import matplotlib.pyplot as plt
-
-labels = ['Current QoS', 'Improved QoS']
-values = [current_qos, improved_qos]
+col3.metric("Improvement %", f"{improvement:.2f}%")
 
 fig, ax = plt.subplots()
-ax.bar(labels, values)
-ax.set_ylabel("QoS")
-ax.set_title("QoS Improvement Comparison")
-
+ax.bar(['Current', 'Improved'], [qos, improved_qos])
 st.pyplot(fig)
-
-# --- Smart Insight ---
-st.markdown("### 💡 Insight")
 
 if improvement > 20:
     st.success("Significant improvement achieved 🚀")
 elif improvement > 5:
-    st.info("Moderate improvement observed 👍")
+    st.info("Moderate improvement 👍")
 else:
-    st.warning("Minimal improvement — try increasing parameters more")
+    st.warning("Try increasing parameters more")
