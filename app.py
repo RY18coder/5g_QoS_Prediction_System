@@ -77,9 +77,10 @@ col2.metric("📊 Predicted QoS", f"{qos:,.0f}")
 col3.metric("⚡ QoS Category", category)
 col4.metric("🎯 Model Accuracy (R²)", 0.946)
 
-# ================= OPTIMIZATION =================
+# ================= REAL OPTIMIZATION ENGINE =================
 st.subheader("🚀 Slice-Aware Network Optimization")
 
+# Slice constraints
 if slice_type == "eMBB":
     bounds = [(50, 100), (15, 30), (15, 40)]
 elif slice_type == "URLLC":
@@ -99,11 +100,15 @@ def objective(x):
     temp['scell_snr_max'] = snr_opt
 
     pred_qos = model.predict(temp)[0]
+
+    # resource penalty (realistic tradeoff)
     penalty = (rbs_opt/100) + (mcs_opt/30)
 
     return -(pred_qos - 0.1 * penalty)
 
-result = minimize(objective, [rbs, mcs, snr], bounds=bounds, method='L-BFGS-B')
+x0 = [rbs, mcs, snr]
+
+result = minimize(objective, x0, bounds=bounds, method='L-BFGS-B')
 opt_rbs, opt_mcs, opt_snr = result.x
 
 # Apply optimized values
@@ -126,48 +131,39 @@ c1.metric("Current QoS", f"{qos:,.0f}")
 c2.metric("Optimized QoS", f"{optimized_qos:,.0f}")
 c3.metric("Improvement", f"{improvement:.2f}%")
 
-# ================= SMART RECOMMENDATIONS =================
-st.markdown("### 🔧 Intelligent Network Adjustment Plan")
+# ================= PARAMETER CHANGES =================
+st.markdown("### 🔧 Recommended Network Changes")
 
-delta_rbs = opt_rbs - rbs
-delta_mcs = opt_mcs - mcs
-delta_snr = opt_snr - snr
+st.write(f"Resource Blocks: {rbs} → {round(opt_rbs,2)}")
+st.write(f"MCS: {mcs} → {round(opt_mcs,2)}")
+st.write(f"SNR: {snr} → {round(opt_snr,2)}")
 
-st.info(f"""
-📌 Optimization Strategy for {slice_type} Slice  
-Target QoS Gain: {improvement:.2f}%
-""")
+# ================= REAL COST / IMPACT ANALYSIS =================
+st.markdown("### 💰 Network Impact Analysis")
 
-st.markdown("#### 🎯 Parameter Actions")
+if opt_rbs > rbs:
+    st.warning("More bandwidth allocation required → Higher operational cost")
+else:
+    st.success("Efficient bandwidth usage → Cost saving")
 
-if abs(delta_rbs) > 2:
-    if delta_rbs > 0:
-        st.warning(f"Increase RBs by ~{round(delta_rbs,2)} (higher capacity, higher cost)")
-    else:
-        st.success(f"Reduce RBs by ~{round(abs(delta_rbs),2)} (better efficiency)")
+if opt_snr > snr:
+    st.info("Requires better signal quality → Tower/infrastructure tuning needed")
 
-if abs(delta_mcs) > 1:
-    if delta_mcs > 0:
-        st.warning(f"Increase MCS → needs better channel quality")
-    else:
-        st.success("Lower MCS → more reliable in weak conditions")
+if opt_mcs > mcs:
+    st.info("Higher modulation → Better channel conditions required")
 
-if abs(delta_snr) > 1:
-    st.info(f"Improve SNR by ~{round(delta_snr,2)} (antenna / power tuning)")
+# ================= ADVISOR =================
+st.subheader("💡 AI Recommendations")
 
-# ================= IMPACT ANALYSIS =================
-st.markdown("### 💰 Operational Impact")
-
-if delta_rbs > 0:
-    st.warning("More spectrum usage → Increased cost")
-elif delta_rbs < 0:
-    st.success("Spectrum savings → Cost reduction")
-
-if delta_snr > 0:
-    st.info("Infrastructure improvement required")
-
-if delta_mcs > 0:
-    st.info("Higher spectral efficiency but sensitive to noise")
+if category == "LOW":
+    if snr < 20:
+        st.warning("Improve signal strength")
+    if rbs < 50:
+        st.warning("Increase bandwidth allocation")
+    if mcs < 15:
+        st.warning("Improve modulation scheme")
+else:
+    st.success("Network performing well")
 
 # ================= GRAPH =================
 st.subheader("📈 QoS Sensitivity Analysis")
@@ -185,6 +181,7 @@ else:
     col = 'pcell_downlink_average_mcs'
 
 qos_vals = []
+
 for v in values:
     temp = input_data.copy()
     temp[col] = v
@@ -192,10 +189,12 @@ for v in values:
 
 fig, ax = plt.subplots()
 ax.plot(values, qos_vals)
+ax.set_xlabel(feature)
+ax.set_ylabel("QoS")
 st.pyplot(fig)
 
-# ================= WHAT-IF SIMULATOR =================
-st.subheader("🔍 What-If QoS Simulator")
+# ================= WHAT-IF =================
+st.subheader("🔍 What-If Simulator")
 
 colA, colB, colC = st.columns(3)
 
@@ -212,24 +211,5 @@ temp['pcell_downlink_average_mcs'] += mcs_boost
 temp['scell_downlink_average_mcs'] += mcs_boost
 
 new_qos = model.predict(temp)[0]
-improvement = ((new_qos - qos) / qos) * 100
 
-st.markdown("### 📊 Before vs After")
-
-c1, c2, c3 = st.columns(3)
-c1.metric("Current QoS", f"{qos:,.0f}")
-c2.metric("New QoS", f"{new_qos:,.0f}")
-c3.metric("Improvement %", f"{improvement:.2f}%")
-
-# Graph
-fig, ax = plt.subplots()
-ax.bar(["Current", "New"], [qos, new_qos])
-ax.set_ylabel("QoS")
-st.pyplot(fig)
-
-if improvement > 20:
-    st.success("🚀 Major improvement possible")
-elif improvement > 5:
-    st.info("👍 Moderate improvement")
-else:
-    st.warning("⚠️ Limited improvement")
+st.metric("Improved QoS", f"{new_qos:,.0f}")
