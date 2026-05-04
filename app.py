@@ -16,20 +16,15 @@ feature_columns = list(model.feature_names_in_)
 st.set_page_config(page_title="5G QoS AI System", layout="wide")
 
 # ================= TITLE =================
-st.title("📡 5G QoS Decision Intelligence System")
-st.write("AI-powered QoS prediction, SLA validation & network optimization")
+st.title("📡 Intelligent 5G QoS Prediction System")
+st.write("AI-powered QoS prediction, analysis & optimization")
 
 # ================= SIDEBAR =================
-st.sidebar.header("📥 Network Inputs")
+st.sidebar.header("📥 Input Network Parameters")
 
-slice_type = st.sidebar.selectbox("5G Slice Type", ["eMBB", "URLLC", "mMTC"])
-
-target_qos = st.sidebar.number_input(
-    "🎯 Target QoS (SLA)",
-    min_value=10000000,
-    max_value=200000000,
-    value=80000000,
-    step=1000000
+slice_type = st.sidebar.selectbox(
+    "Select 5G Slice Type",
+    ["eMBB", "URLLC", "mMTC"]
 )
 
 speed = st.sidebar.slider("Speed (km/h)", 0, 120, 40)
@@ -46,7 +41,7 @@ st.sidebar.markdown("""
 - Nandini Tiwari  
 """)
 
-# ================= INPUT DATA =================
+# ================= CREATE INPUT =================
 input_data = pd.DataFrame([{
     'speed_kmh': speed,
     'pcell_snr_max': snr,
@@ -63,10 +58,10 @@ for col in feature_columns:
 
 input_data = input_data[feature_columns]
 
-# ================= CURRENT QoS =================
+# ================= PREDICTION =================
 qos = model.predict(input_data)[0]
 
-# ================= CATEGORY =================
+# ================= QoS CATEGORY =================
 if qos > 8e7:
     category = "HIGH"
 elif qos > 4e7:
@@ -75,15 +70,15 @@ else:
     category = "LOW"
 
 # ================= DASHBOARD =================
-c1, c2, c3, c4 = st.columns(4)
+col1, col2, col3, col4 = st.columns(4)
 
-c1.metric("Slice", slice_type)
-c2.metric("Current QoS", f"{qos:,.0f}")
-c3.metric("QoS Category", category)
-c4.metric("Model Accuracy", "94.6%")
+col1.metric("📡 Slice Type", slice_type)
+col2.metric("📊 Predicted QoS", f"{qos:,.0f}")
+col3.metric("⚡ QoS Category", category)
+col4.metric("🎯 Model Accuracy (R²)", 0.946)
 
-# ================= SLA OPTIMIZATION =================
-st.subheader("🚀 SLA-Based Network Optimization")
+# ================= OPTIMIZATION =================
+st.subheader("🚀 Slice-Aware Network Optimization")
 
 if slice_type == "eMBB":
     bounds = [(50, 100), (15, 30), (15, 40)]
@@ -92,140 +87,149 @@ elif slice_type == "URLLC":
 else:
     bounds = [(10, 50), (5, 15), (10, 30)]
 
-def sla_objective(x):
-    rbs_o, mcs_o, snr_o = map(int, x)
+def objective(x):
+    rbs_opt, mcs_opt, snr_opt = x
 
     temp = input_data.copy()
-    temp['pcell_downlink_num_rbs'] = rbs_o
-    temp['scell_downlink_num_rbs'] = rbs_o
-    temp['pcell_downlink_average_mcs'] = mcs_o
-    temp['scell_downlink_average_mcs'] = mcs_o
-    temp['pcell_snr_max'] = snr_o
-    temp['scell_snr_max'] = snr_o
+    temp['pcell_downlink_num_rbs'] = rbs_opt
+    temp['scell_downlink_num_rbs'] = rbs_opt
+    temp['pcell_downlink_average_mcs'] = mcs_opt
+    temp['scell_downlink_average_mcs'] = mcs_opt
+    temp['pcell_snr_max'] = snr_opt
+    temp['scell_snr_max'] = snr_opt
 
-    pred = model.predict(temp)[0]
+    pred_qos = model.predict(temp)[0]
+    penalty = (rbs_opt/100) + (mcs_opt/30)
 
-    penalty = (rbs_o/100) + (mcs_o/30)
+    return -(pred_qos - 0.1 * penalty)
 
-    return abs(pred - target_qos) + 1e7 * penalty
+result = minimize(objective, [rbs, mcs, snr], bounds=bounds, method='L-BFGS-B')
+opt_rbs, opt_mcs, opt_snr = result.x
 
-result = minimize(sla_objective, [rbs, mcs, snr], bounds=bounds, method='L-BFGS-B')
+# Apply optimized values
+opt_input = input_data.copy()
+opt_input['pcell_downlink_num_rbs'] = opt_rbs
+opt_input['scell_downlink_num_rbs'] = opt_rbs
+opt_input['pcell_downlink_average_mcs'] = opt_mcs
+opt_input['scell_downlink_average_mcs'] = opt_mcs
+opt_input['pcell_snr_max'] = opt_snr
+opt_input['scell_snr_max'] = opt_snr
 
-opt_rbs = int(round(result.x[0]))
-opt_mcs = int(round(result.x[1]))
-opt_snr = int(round(result.x[2]))
-
-# recompute QoS
-temp = input_data.copy()
-temp['pcell_downlink_num_rbs'] = opt_rbs
-temp['scell_downlink_num_rbs'] = opt_rbs
-temp['pcell_downlink_average_mcs'] = opt_mcs
-temp['scell_downlink_average_mcs'] = opt_mcs
-temp['pcell_snr_max'] = opt_snr
-temp['scell_snr_max'] = opt_snr
-
-optimized_qos = model.predict(temp)[0]
-
-# ================= FEASIBILITY =================
-st.markdown("### 🧠 SLA Feasibility")
-
-if optimized_qos >= target_qos * 0.95:
-    st.success("✅ SLA ACHIEVABLE")
-else:
-    st.error("❌ SLA NOT ACHIEVABLE")
-
-    if slice_type == "mMTC":
-        st.write("- mMTC not designed for high throughput")
-    if snr < 15:
-        st.write("- Poor signal quality")
-    if rbs < 30:
-        st.write("- Low bandwidth allocation")
+optimized_qos = model.predict(opt_input)[0]
+improvement = ((optimized_qos - qos) / qos) * 100
 
 # ================= RESULTS =================
 st.markdown("### 📊 Optimization Results")
 
-r1, r2, r3 = st.columns(3)
-r1.metric("Target QoS", f"{target_qos:,.0f}")
-r2.metric("Achieved QoS", f"{optimized_qos:,.0f}")
-r3.metric("Gap", f"{target_qos - optimized_qos:,.0f}")
+c1, c2, c3 = st.columns(3)
+c1.metric("Current QoS", f"{qos:,.0f}")
+c2.metric("Optimized QoS", f"{optimized_qos:,.0f}")
+c3.metric("Improvement", f"{improvement:.2f}%")
 
-# ================= AI DECISION ENGINE =================
-st.markdown("### 💡 AI Decision Engine")
+# ================= SMART RECOMMENDATIONS =================
+st.markdown("### 🔧 Intelligent Network Adjustment Plan")
 
 delta_rbs = opt_rbs - rbs
 delta_mcs = opt_mcs - mcs
 delta_snr = opt_snr - snr
 
-if optimized_qos >= target_qos:
-    st.success("Optimal configuration found")
+st.info(f"""
+📌 Optimization Strategy for {slice_type} Slice  
+Target QoS Gain: {improvement:.2f}%
+""")
 
-if delta_rbs > 0:
-    st.write(f"➡ Increase RBs by {delta_rbs}")
-elif delta_rbs < 0:
-    st.write(f"➡ Reduce RBs by {abs(delta_rbs)} (save cost)")
+st.markdown("#### 🎯 Parameter Actions")
 
-if delta_mcs > 0:
-    st.write(f"➡ Increase MCS to {opt_mcs}")
-elif delta_mcs < 0:
-    st.write("➡ Reduce MCS for stability")
+if abs(delta_rbs) > 2:
+    if delta_rbs > 0:
+        st.warning(f"Increase RBs by ~{round(delta_rbs,2)} (higher capacity, higher cost)")
+    else:
+        st.success(f"Reduce RBs by ~{round(abs(delta_rbs),2)} (better efficiency)")
 
-if delta_snr > 0:
-    st.write(f"➡ Improve SNR by {delta_snr}")
+if abs(delta_mcs) > 1:
+    if delta_mcs > 0:
+        st.warning(f"Increase MCS → needs better channel quality")
+    else:
+        st.success("Lower MCS → more reliable in weak conditions")
 
-# ================= IMPACT =================
+if abs(delta_snr) > 1:
+    st.info(f"Improve SNR by ~{round(delta_snr,2)} (antenna / power tuning)")
+
+# ================= IMPACT ANALYSIS =================
 st.markdown("### 💰 Operational Impact")
 
 if delta_rbs > 0:
-    st.warning("Higher spectrum usage → Higher cost")
+    st.warning("More spectrum usage → Increased cost")
 elif delta_rbs < 0:
-    st.success("Spectrum saving → Cost reduction")
+    st.success("Spectrum savings → Cost reduction")
 
 if delta_snr > 0:
-    st.info("Infra upgrade required")
+    st.info("Infrastructure improvement required")
+
+if delta_mcs > 0:
+    st.info("Higher spectral efficiency but sensitive to noise")
 
 # ================= GRAPH =================
-st.subheader("📈 QoS Sensitivity")
+st.subheader("📈 QoS Sensitivity Analysis")
 
-feature = st.selectbox("Parameter", ["SNR", "RBs", "MCS"])
+feature = st.selectbox("Select Parameter", ["SNR", "Resource Blocks", "MCS"])
 
 if feature == "SNR":
-    vals = np.arange(5, 50, 5)
+    values = np.arange(5, 50, 5)
     col = 'pcell_snr_max'
-elif feature == "RBs":
-    vals = np.arange(10, 100, 10)
+elif feature == "Resource Blocks":
+    values = np.arange(10, 100, 10)
     col = 'pcell_downlink_num_rbs'
 else:
-    vals = np.arange(5, 30, 2)
+    values = np.arange(5, 30, 2)
     col = 'pcell_downlink_average_mcs'
 
 qos_vals = []
-for v in vals:
+for v in values:
     temp = input_data.copy()
     temp[col] = v
     qos_vals.append(model.predict(temp)[0])
 
 fig, ax = plt.subplots()
-ax.plot(vals, qos_vals)
+ax.plot(values, qos_vals)
 st.pyplot(fig)
 
-# ================= WHAT-IF =================
-st.subheader("🔍 What-If Simulator")
+# ================= WHAT-IF SIMULATOR =================
+st.subheader("🔍 What-If QoS Simulator")
 
-a, b, c = st.columns(3)
+colA, colB, colC = st.columns(3)
 
-snr_b = a.slider("SNR Boost", 0, 20, 5)
-rbs_b = b.slider("RB Boost", 0, 50, 10)
-mcs_b = c.slider("MCS Boost", 0, 10, 2)
+snr_boost = colA.slider("Increase SNR", 0, 20, 5)
+rbs_boost = colB.slider("Increase RBs", 0, 50, 10)
+mcs_boost = colC.slider("Increase MCS", 0, 10, 2)
 
 temp = input_data.copy()
-temp['pcell_snr_max'] += snr_b
-temp['pcell_downlink_num_rbs'] += rbs_b
-temp['pcell_downlink_average_mcs'] += mcs_b
+temp['pcell_snr_max'] += snr_boost
+temp['scell_snr_max'] += snr_boost
+temp['pcell_downlink_num_rbs'] += rbs_boost
+temp['scell_downlink_num_rbs'] += rbs_boost
+temp['pcell_downlink_average_mcs'] += mcs_boost
+temp['scell_downlink_average_mcs'] += mcs_boost
 
 new_qos = model.predict(temp)[0]
+improvement = ((new_qos - qos) / qos) * 100
 
-st.metric("New QoS", f"{new_qos:,.0f}")
+st.markdown("### 📊 Before vs After")
 
+c1, c2, c3 = st.columns(3)
+c1.metric("Current QoS", f"{qos:,.0f}")
+c2.metric("New QoS", f"{new_qos:,.0f}")
+c3.metric("Improvement %", f"{improvement:.2f}%")
+
+# Graph
 fig, ax = plt.subplots()
 ax.bar(["Current", "New"], [qos, new_qos])
+ax.set_ylabel("QoS")
 st.pyplot(fig)
+
+if improvement > 20:
+    st.success("🚀 Major improvement possible")
+elif improvement > 5:
+    st.info("👍 Moderate improvement")
+else:
+    st.warning("⚠️ Limited improvement")
