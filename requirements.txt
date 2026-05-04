@@ -6,3 +6,4 @@ scipy
 joblib
 folium
 streamlit-folium
+matplotlib
