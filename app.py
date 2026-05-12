@@ -11,7 +11,6 @@ import joblib
 import joblib
 import matplotlib.pyplot as plt
 import matplotlib.pyplot as plt
-from utils.optimizer import optimize_network
 
 
 # ================= LOAD MODEL =================
